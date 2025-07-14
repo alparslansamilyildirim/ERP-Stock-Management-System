@@ -11,7 +11,7 @@ from tkinter import ttk, filedialog
 from database import (
     get_column_info, fetch_all_rows, insert_row, delete_row_by_rowid, update_cell,
     undo_add, undo_update, export_to_excel,
-    compare_with_mappings, create_kod_mapping, get_all_kod_values, get_all_kod_mappings, delete_kod_mapping
+    compare_with_mappings, create_kod_mapping, get_all_kod_values, get_all_kod_mappings, delete_kod_mapping, get_kod_mapping
 )
 from utils import autosize_columns, create_dialog, create_treeview, create_combobox, labeled_entry, sort_treeview_column
 import pandas as pd
@@ -306,16 +306,53 @@ class ERPApp:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to read file:\n{e}")
             return
+        # --- Add stock_check Column Left of Qty ---
+        cols = list(df.columns)
+        qty_index = cols.index('Qty') if 'Qty' in cols else len(cols)
+        cols.insert(qty_index, 'stock_check')
         # Create popup window to display uploaded data
         popup = create_dialog(self.root, "BOM-List", "800x400")
         frame = ttk.Frame(popup)
         frame.pack(fill="both", expand=True)
-        cols = list(df.columns)
         tree = create_treeview(frame, cols)
         for c in cols:
             tree.heading(c, text=c, command=lambda _c=c: sort_treeview_column(tree, _c, self.col_types, cols, False))
+        # --- Prepare Database DataFrame for Comparison ---
+        db_rows = fetch_all_rows()
+        db_cols = pd.Index([str(c) for c in get_column_info()[0]])
+        db_data = [row[1:] for row in db_rows]
+        db_df = pd.DataFrame(db_data, columns=db_cols)
+        # --- Insert Rows with Status (Difference) ---
         for idx, row in df.iterrows():
-            tree.insert("", "end", iid=str(idx), values=list(row))
+            value = row.get('Value')
+            qty_file = row.get('Qty')
+            stock_check = ""
+            # Try direct match first
+            db_row = db_df[db_df['KOD'] == value]
+            if db_row.empty:
+                # Try mapped match
+                mapped_kod = get_kod_mapping(value)
+                if mapped_kod:
+                    db_row = db_df[db_df['KOD'] == mapped_kod]
+            if not db_row.empty:
+                qty_db = db_row.iloc[0].get('MİKTAR')
+                if qty_file is not None and qty_db is not None and str(qty_file).strip() != "" and str(qty_db).strip() != "":
+                    try:
+                        qty_file_num = int(qty_file)
+                        qty_db_num = int(qty_db)
+                        if qty_file_num > qty_db_num:
+                            stock_check = qty_db_num - qty_file_num
+                        else:
+                            stock_check = qty_file_num
+                    except (TypeError, ValueError):
+                        stock_check = ""
+                else:
+                    stock_check = ""
+            else:
+                stock_check = ""
+            values = list(row)
+            values.insert(qty_index, stock_check)
+            tree.insert("", "end", iid=str(idx), values=values)
         tree.grid(row=0, column=0, sticky="nsew")
         vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
         vsb.grid(row=0, column=1, sticky="ns")
@@ -340,13 +377,13 @@ class ERPApp:
                 df['Qty_orig'] = df['Qty']
             for idx, row in df.iterrows():
                 orig_qty = row.get('Qty_orig', row['Qty'])
-                if orig_qty is None:
+                if orig_qty is None or str(orig_qty).strip() == "":
                     new_qty = orig_qty
                     skipped_rows.append(idx)
                 else:
                     try:
-                        orig_qty_int = int(orig_qty)
-                        new_qty = orig_qty_int * multiplier if multiplier != 1 else orig_qty_int
+                        orig_qty_num = int(orig_qty)
+                        new_qty = orig_qty_num * multiplier if multiplier != 1 else orig_qty_num
                     except (TypeError, ValueError):
                         new_qty = orig_qty
                         skipped_rows.append(idx)
@@ -354,16 +391,45 @@ class ERPApp:
                 values = list(tree.item(str(idx), 'values'))
                 try:
                     qty_col_idx = cols.index('Qty')
+                    stock_check_col_idx = cols.index('stock_check')
                 except ValueError:
                     continue
                 values[qty_col_idx] = str(new_qty)
+                # Unified stock_check calculation for direct and mapped matches
+                value = values[cols.index('Value')] if 'Value' in cols else None
+                stock_check = ""
+                db_row = db_df[db_df['KOD'] == value]
+                if db_row.empty:
+                    mapped_kod = get_kod_mapping(value)
+                    if mapped_kod:
+                        db_row = db_df[db_df['KOD'] == mapped_kod]
+                if not db_row.empty:
+                    qty_db = db_row.iloc[0].get('MİKTAR')
+                    if new_qty is not None and qty_db is not None and str(new_qty).strip() != "" and str(qty_db).strip() != "":
+                        try:
+                            qty_file_num = int(new_qty)
+                            qty_db_num = int(qty_db)
+                            if qty_file_num > qty_db_num:
+                                stock_check = qty_db_num - qty_file_num
+                            else:
+                                stock_check = qty_file_num
+                        except (TypeError, ValueError):
+                            stock_check = ""
+                    else:
+                        stock_check = ""
+                else:
+                    stock_check = ""
+                values[stock_check_col_idx] = str(stock_check)
                 tree.item(str(idx), values=values)
             if skipped_rows:
                 messagebox.showwarning(
                     "Qty Multiplier",
                     f"Skipped {len(skipped_rows)} row(s) due to invalid or missing 'Qty' values."
                 )
+        
         amount_entry.bind('<Return>', apply_qty_multiplier)
+      
+         
         # --- Compare with Database Section ---
         def compare_with_database():
             # Compare uploaded file with database using KOD mappings
