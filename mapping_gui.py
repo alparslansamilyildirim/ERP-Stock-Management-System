@@ -166,4 +166,5 @@ def show_mapping_dialog(root, unmatched_values):
         first_value = unmatched_values.iloc[0]['Value']
         notebook.select(create_frame)
         alt_value_var.set(first_value)
-        alt_value_entry.focus_set() 
+        alt_value_entry.focus_set()
+        
