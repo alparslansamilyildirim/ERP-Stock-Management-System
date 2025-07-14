@@ -18,7 +18,7 @@ import pandas as pd
 from tkinter import messagebox
 from shortcuts import bind_fullscreen_shortcuts, bind_common_shortcuts
 from mapping_gui import show_kod_mappings, show_mapping_dialog
-from theme import apply_aqua_theme
+
 
 # Utility: Toggle fullscreen for any Tkinter window
 
@@ -31,8 +31,6 @@ def toggle_fullscreen_for_window(window, state_attr='_is_fullscreen'):
 class ERPApp:
     def __init__(self, root):
         style = ttk.Style()
-        # Apply Aqua-like theme for macOS appearance
-        apply_aqua_theme(style)
         self.root = root
         self.root.title("Stock-Management")
         self.root.rowconfigure(1, weight=1)
@@ -40,6 +38,7 @@ class ERPApp:
         self.undo_stack = []
         self.selected_iid = None
         self.cols, self.col_types = get_column_info()
+        self.cell_editor = None  # Initialize cell editor
         self.setup_widgets()
         self.load_data()
         self.root.after(100, self.autosize_columns)
@@ -78,6 +77,8 @@ class ERPApp:
         hsb.grid(row=1, column=0, sticky="ew")
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
         self.tree.bind('<Double-1>', self.on_tree_cell_double_click)
+        # Force visible colors for all rows
+        self.tree.tag_configure('all', foreground='black', background='white')
         # --- Action Buttons ---
         btn_frame = ttk.Frame(self.root)
         btn_frame.pack(side="bottom", fill="x", expand=False, padx=5, pady=5)
