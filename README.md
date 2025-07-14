@@ -36,7 +36,7 @@ A modern, desktop-based ERP stock management application built with Python and T
 1. Clone the repository:
    ```bash
    git clone <repository-url>
-   cd ERP-v7
+   cd ERP
    ```
 
 2. Install required dependencies:
@@ -86,7 +86,7 @@ A modern, desktop-based ERP stock management application built with Python and T
 ## Project Structure
 
 ```
-ERP-v7/
+ERP/
 ├── main.py              # Application entry point
 ├── gui.py               # Main GUI implementation
 ├── database.py          # Database operations and CRUD functions
@@ -153,7 +153,7 @@ For issues, questions, or feature requests, please open an issue on the GitHub r
 
 ## Changelog
 
-### Version 7.0
+### Version
 - Complete UI redesign with Aqua-like theme
 - Enhanced KOD mapping system
 - Improved error handling and user feedback
