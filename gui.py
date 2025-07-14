@@ -516,3 +516,21 @@ class ERPApp:
                 unmatched_df = pd.DataFrame([{'Value': value}])
                 show_mapping_dialog(self.root, unmatched_df)
         tree.bind('<Double-1>', on_popup_row_double_click)
+        # Add Export to Excel button at the bottom of the popup
+        def export_bom_to_excel():
+            file_path = filedialog.asksaveasfilename(
+                defaultextension='.xlsx',
+                filetypes=[('Excel files', '*.xlsx')],
+                title='Save BOM-List As'
+            )
+            if not file_path:
+                return
+            # Export current Treeview contents
+            data = []
+            for iid in tree.get_children():
+                data.append(tree.item(iid)['values'])
+            export_df = pd.DataFrame(data, columns=[str(c) for c in cols])  # type: ignore
+            export_df.to_excel(file_path, index=False)
+            messagebox.showinfo("Exported", f"BOM-List exported to {file_path}")
+        export_btn = ttk.Button(popup, text="Export to Excel", command=export_bom_to_excel)
+        export_btn.pack(side="bottom", fill="x", padx=10, pady=5)
