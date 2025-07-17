@@ -37,7 +37,9 @@ class ERPApp:
         self.root.columnconfigure(0, weight=1)
         self.undo_stack = []
         self.selected_iid = None
-        self.cols, self.col_types = get_column_info()
+        self.cols: list[str]
+        cols_raw, self.col_types = get_column_info()
+        self.cols = [str(c) for c in cols_raw]
         self.cell_editor = None  # Initialize cell editor
         self.setup_widgets()
         self.load_data()
@@ -65,10 +67,10 @@ class ERPApp:
         frame.pack(fill="both", expand=True, padx=10, pady=5)
         frame.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
-        self.tree = ttk.Treeview(frame, columns=self.cols, show="headings")
+        self.tree = ttk.Treeview(frame, columns=tuple(self.cols), show="headings")
         for c in self.cols:
-            self.tree.heading(c, text=c, command=lambda _c=c: self.sort_column(_c, False))
-            self.tree.column(c, width=120, anchor="w")
+            self.tree.heading(str(c), text=str(c), command=lambda _c=str(c): self.sort_column(_c, False))
+            self.tree.column(str(c), width=120, anchor="w")
         self.tree.grid(row=0, column=0, sticky="nsew")
         vsb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(frame, orient="horizontal", command=self.tree.xview)
@@ -103,9 +105,10 @@ class ERPApp:
         query = self.search_var.get().lower()
         self.tree.delete(*self.tree.get_children())
         for row in fetch_all_rows():
-            values = [str(v) if v is not None else '' for v in row[1:]]
+            row = self._row_keys_to_str(row)
+            values = [str(row[str(c)]) if row.get(str(c)) is not None else '' for c in self.cols]
             if not query or any(query in v.lower() for v in values):
-                self.tree.insert("", "end", iid=str(row[0]), values=values)
+                self.tree.insert("", "end", iid=str(row.get('id', '')), values=values)
         self.update_row_count()
 
     def sort_column(self, col, reverse=False):
@@ -113,7 +116,7 @@ class ERPApp:
         items = [(self.tree.set(k, col), k) for k in self.tree.get_children()]
         col_type = self.col_types.get(col, 'TEXT')
         def try_cast(val):
-            if col_type in ('INTEGER', 'REAL', 'NUMERIC', 'FLOAT', 'DOUBLE'):
+            if col_type.upper() in ('INTEGER', 'INT', 'REAL', 'NUMERIC', 'FLOAT', 'DOUBLE', 'DECIMAL'):
                 try:
                     return float(val) if val != '' else float('-inf')
                 except ValueError:
@@ -145,15 +148,15 @@ class ERPApp:
         dialog.grab_set()
         entries = {}
         for i, col in enumerate(self.cols):
-            tk.Label(dialog, text=col).grid(row=i, column=0, padx=10, pady=5, sticky="e")
+            tk.Label(dialog, text=str(col)).grid(row=i, column=0, padx=10, pady=5, sticky="e")
             entry = tk.Entry(dialog)
             entry.grid(row=i, column=1, padx=10, pady=5, sticky="w")
-            entries[col] = entry
+            entries[str(col)] = entry
         def on_ok():
             # Type validation for each entry
             validated_values = []
             for c in self.cols:
-                val = entries[c].get()
+                val = entries[str(c)].get()
                 col_type = self.col_types.get(c, 'TEXT')
                 if val == '':
                     validated_values.append(None)
@@ -246,7 +249,7 @@ class ERPApp:
         if not bbox:
             return
         x, y, width, height = bbox
-        value = self.tree.set(rowid).get(col_name, "")
+        value = self.tree.set(rowid).get(str(col_name), "")
         self.cell_editor = tk.Entry(self.tree)
         self.cell_editor.insert(0, value)
         self.cell_editor.select_range(0, tk.END)
@@ -272,7 +275,7 @@ class ERPApp:
                     messagebox.showerror("Invalid Input", f"Column '{col_name}' expects type {col_type}. Invalid value: '{new_value}'")
                     return
             old_values = self.tree.item(rowid, 'values')
-            col_idx = self.cols.index(col_name)
+            col_idx = self.cols.index(str(col_name))
             old_value = old_values[col_idx]
             if validated_value != old_value:
                 try:
@@ -319,10 +322,10 @@ class ERPApp:
         for c in cols:
             tree.heading(c, text=c, command=lambda _c=c: sort_treeview_column(tree, _c, self.col_types, cols, False))
         # --- Prepare Database DataFrame for Comparison ---
-        db_rows = fetch_all_rows()
-        db_cols = pd.Index([str(c) for c in get_column_info()[0]])
-        db_data = [row[1:] for row in db_rows]
-        db_df = pd.DataFrame(db_data, columns=db_cols)
+        db_rows = [self._row_keys_to_str(row) for row in fetch_all_rows()]
+        db_cols: list[str] = [str(c) for c in get_column_info()[0]]
+        db_data = [[row[str(c)] for c in db_cols] for row in db_rows]
+        db_df = pd.DataFrame(db_data, columns=pd.Index(db_cols))
         # --- Insert Rows with In Stock (Difference) ---
         for idx, row in df.iterrows():
             value = row.get('Value')
@@ -442,10 +445,10 @@ class ERPApp:
         # --- Compare with Database Section ---
         def compare_with_database():
             # Compare uploaded file with database using KOD mappings
-            db_rows = fetch_all_rows()
-            db_cols = pd.Index([str(c) for c in get_column_info()[0]])
-            db_data = [row[1:] for row in db_rows]
-            db_df = pd.DataFrame(db_data, columns=db_cols)
+            db_rows = [self._row_keys_to_str(row) for row in fetch_all_rows()]
+            db_cols: list[str] = [str(c) for c in get_column_info()[0]]
+            db_data = [[row[str(c)] for c in db_cols] for row in db_rows]
+            db_df = pd.DataFrame(db_data, columns=pd.Index(db_cols))
             if 'Value' not in df.columns or 'KOD' not in db_df.columns:
                 messagebox.showerror("Error", "'Value' column in file or 'KOD' column in database not found.")
                 return
@@ -534,3 +537,9 @@ class ERPApp:
             messagebox.showinfo("Exported", f"BOM-List exported to {file_path}")
         export_btn = ttk.Button(popup, text="Export to Excel", command=export_bom_to_excel)
         export_btn.pack(side="bottom", fill="x", padx=10, pady=5)
+
+    def _row_keys_to_str(self, row):
+        # Convert all keys in a dict to str
+        if isinstance(row, dict):
+            return {str(k): v for k, v in row.items()}
+        return row

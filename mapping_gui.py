@@ -33,7 +33,10 @@ def show_kod_mappings(root):
         mapping_tree.delete(*mapping_tree.get_children())
         mappings = get_all_kod_mappings()
         for mapping in mappings:
-            mapping_tree.insert("", "end", values=mapping)
+            if isinstance(mapping, dict):
+                mapping_tree.insert("", "end", values=[mapping[c] for c in mapping_cols])
+            else:
+                mapping_tree.insert("", "end", values=list(mapping))
     load_mappings()
     def delete_selected_mapping():
         """Delete the selected KOD mapping after confirmation."""
